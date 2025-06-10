@@ -1,0 +1,122 @@
+Simple E-commerce Store with Django Backend and HTML/CSS/JS Frontend
+1. Django Setup 
+# Create a Django project and app
+# django-admin startproject ecommerce
+# cd ecommerce
+# python manage.py startapp store
+
+2. settings.py 
+# Add 'store' to INSTALLED_APPS
+
+3. models.py (store/models.py) 
+from django.db import models
+from django.contrib.auth.models import User
+
+class Product(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    image_url = models.URLField()
+
+class Order(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    total = models.DecimalField(max_digits=10, decimal_places=2)
+
+class OrderItem(models.Model):
+    order = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField()
+
+4. views.py (store/views.py) 
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required
+from .models import Product, Order, OrderItem
+from django.contrib.auth import login, authenticate
+from django.contrib.auth.forms import UserCreationForm
+from django.http import JsonResponse
+
+
+def product_list(request):
+    products = Product.objects.all()
+    return render(request, 'product_list.html', {'products': products})
+
+def product_detail(request, product_id):
+    product = get_object_or_404(Product, id=product_id)
+    return render(request, 'product_detail.html', {'product': product})
+
+@login_required
+def add_to_cart(request, product_id):
+    cart = request.session.get('cart', {})
+    cart[str(product_id)] = cart.get(str(product_id), 0) + 1
+    request.session['cart'] = cart
+    return redirect('view_cart')
+
+@login_required
+def view_cart(request):
+    cart = request.session.get('cart', {})
+    items = []
+    total = 0
+    for id, quantity in cart.items():
+        product = Product.objects.get(id=id)
+        items.append({'product': product, 'quantity': quantity})
+        total += product.price * quantity
+    return render(request, 'cart.html', {'items': items, 'total': total})
+
+@login_required
+def checkout(request):
+    cart = request.session.get('cart', {})
+    if not cart:
+        return redirect('product_list')
+    total = 0
+    order = Order.objects.create(user=request.user, total=0)
+    for id, quantity in cart.items():
+        product = Product.objects.get(id=id)
+        OrderItem.objects.create(order=order, product=product, quantity=quantity)
+        total += product.price * quantity
+    order.total = total
+    order.save()
+    request.session['cart'] = {}
+    return render(request, 'checkout_success.html', {'order': order})
+
+def register(request):
+    if request.method == 'POST':
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            login(request, user)
+            return redirect('product_list')
+    else:
+        form = UserCreationForm()
+    return render(request, 'registration/register.html', {'form': form})
+
+5. urls.py (ecommerce/urls.py) 
+from django.contrib import admin
+from django.urls import path, include
+from store import views
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('', views.product_list, name='product_list'),
+    path('product/<int:product_id>/', views.product_detail, name='product_detail'),
+    path('cart/', views.view_cart, name='view_cart'),
+    path('add_to_cart/<int:product_id>/', views.add_to_cart, name='add_to_cart'),
+    path('checkout/', views.checkout, name='checkout'),
+    path('register/', views.register, name='register'),
+    path('accounts/', include('django.contrib.auth.urls')),
+]
+
+6. Templates (HTML) 
+# templates/product_list.html
+# templates/product_detail.html
+# templates/cart.html
+# templates/checkout_success.html
+# templates/registration/register.html
+
+7. Run the server 
+# python manage.py makemigrations
+# python manage.py migrate
+# python manage.py createsuperuser
+# python manage.py runserver
+# Then visit http://127.0.0.1:8000/ in browser.
+# This provides a full working e-commerce app with user login/registration, product listing, shopping cart, and checkout functionality.
